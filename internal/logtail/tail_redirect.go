@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -57,7 +58,8 @@ func NewTailAndRedirect(srcFile string, dstFile string, logger *zap.Logger) *Tai
 }
 
 // Start sets up file handles, watchers, and starts processing lines from the source file to the destination. Returns on error.
-func (t *TailAndRedirect) Start() error {
+func (t *TailAndRedirect) Start(rotateChan <-chan bool) error {
+	var fileMutex sync.RWMutex
 
 	if err := t.openDstFile(); err != nil {
 		t.logger.Error("Unable to open destination file", zap.String("file", t.dstFilename), zap.Error(err))
@@ -68,6 +70,22 @@ func (t *TailAndRedirect) Start() error {
 		t.logger.Error("fsnotify failed to initialize", zap.Error(err))
 		return err
 	}
+
+	go func() {
+		for range rotateChan {
+			if t.dstFile != nil {
+				fileMutex.Lock()
+				_, err := t.dstFile.Seek(0, io.SeekStart)
+				if err != nil {
+					t.logger.Error("Unable to seek destination file", zap.String("dst_file", t.dstFilename), zap.Error(err))
+				}
+				t.logger.Info("received rotation signal seeking to 0", zap.String("dst_file", t.dstFilename))
+				fileMutex.Unlock()
+
+			}
+
+		}
+	}()
 
 	go func() {
 		if err := t.detectTruncate(); err != nil {

@@ -1,32 +1,30 @@
 package app
 
 import (
+	"sync"
 	"time"
 
+	"github.com/akmanon/kpi-metricsd/internal/config"
 	"github.com/akmanon/kpi-metricsd/internal/logrotate"
 	"github.com/akmanon/kpi-metricsd/internal/logtail"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 type App struct {
 	LogRotate       *logrotate.LogRotate
 	TailAndRedirect *logtail.TailAndRedirect
+	wg              sync.WaitGroup
 }
 
-func NewApp() *App {
+func NewApp(cfg *config.Cfg, logger *zap.Logger) *App {
 
-	loggerCfg := zap.NewProductionConfig()
-	loggerCfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, _ := loggerCfg.Build()
-	defer logger.Sync()
-
-	srcFile := "test_log/app.log"
-	destFile := "test_log/app_redirect.log"
-	rotateInt := time.Second * 10
+	srcFile := cfg.LogCfg.SourceLogFile
+	destFile := cfg.LogCfg.RedirectLogFile
+	destFileRotated := cfg.LogCfg.RotatedLogFile
+	rotateInt, _ := time.ParseDuration(cfg.LogCfg.RotationInterval)
 
 	logTail := logtail.NewTailAndRedirect(srcFile, destFile, logger)
-	logRotate := logrotate.NewLogRotate(srcFile, destFile, rotateInt)
+	logRotate := logrotate.NewLogRotate(destFile, destFileRotated, rotateInt, logger)
 	return &App{
 		LogRotate:       logRotate,
 		TailAndRedirect: logTail,
@@ -34,7 +32,23 @@ func NewApp() *App {
 }
 
 func (app *App) Run() {
-	go app.LogRotate.Start()
-	go app.TailAndRedirect.Start()
+	rotateChan := make(chan bool)
+	app.wg.Add(1)
+	go app.LogRotate.Start(rotateChan)
+	defer app.wg.Done()
+
+	app.wg.Add(1)
+	go app.TailAndRedirect.Start(rotateChan)
+	defer app.wg.Done()
+
+	app.wg.Wait()
+
+}
+
+func (app *App) Stop() {
+	rotateChan := make(chan bool)
+	go app.LogRotate.Stop()
+	go app.TailAndRedirect.Stop()
+	close(rotateChan)
 
 }

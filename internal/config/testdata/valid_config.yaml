@@ -1,0 +1,5 @@
+log_config:
+  source_log_file: "testdata/app.log"
+  redirect_log_file: "testdata/app_redirect.log"
+  rotated_log_file: "testdata/app_rotated.log"
+  rotation_interval: "2m"

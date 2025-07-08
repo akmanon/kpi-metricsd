@@ -33,10 +33,10 @@ func TestTailAndRedirect(t *testing.T) {
 		assert.NoError(t, err)
 		srcFile.Close()
 		tr := NewTailAndRedirect(srcF, dstF, logger)
-
+		rotateChan := make(chan bool)
 		done := make(chan error)
 		go func() {
-			done <- tr.Start()
+			done <- tr.Start(rotateChan)
 		}()
 
 		<-trReady(tr)
