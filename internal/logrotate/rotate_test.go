@@ -22,6 +22,7 @@ func TestRotateLog(t *testing.T) {
 		f.Write([]byte("CancelTest"))
 		f.Close()
 		rotateChan := make(chan bool)
+		processMetricsNotify := make(chan bool)
 
 		logRotate := NewLogRotate(srcFile, destFile, interval, zap.NewNop())
 
@@ -30,7 +31,7 @@ func TestRotateLog(t *testing.T) {
 			logRotate.Stop()
 		})
 
-		err := logRotate.Start(rotateChan)
+		err := logRotate.Start(rotateChan, processMetricsNotify)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "stopped by cancel signal")
 	})
@@ -40,6 +41,7 @@ func TestRotateLog(t *testing.T) {
 		destFile := "test_log/nonexistent_rotate.log"
 		interval := time.Millisecond * 200
 		rotateChan := make(chan bool)
+		processMetricsNotify := make(chan bool)
 
 		logRotate := NewLogRotate(srcFile, destFile, interval, zap.NewNop())
 
@@ -47,7 +49,7 @@ func TestRotateLog(t *testing.T) {
 			logRotate.Stop()
 		})
 
-		err := logRotate.Start(rotateChan)
+		err := logRotate.Start(rotateChan, processMetricsNotify)
 		assert.Error(t, err)
 		assert.True(t, os.IsNotExist(err), "expected file not exist error")
 		cleanUpTestDir()
@@ -65,6 +67,7 @@ func TestRotateLog(t *testing.T) {
 		f.WriteString("HelloWorld")
 		f.Close()
 		rotateChan := make(chan bool)
+		processMetricsNotify := make(chan bool)
 
 		logRotate := NewLogRotate(srcFile, destFile, interval, zap.NewNop())
 
@@ -73,7 +76,7 @@ func TestRotateLog(t *testing.T) {
 			cleanUpTestDir()
 		})
 
-		err = logRotate.Start(rotateChan)
+		err = logRotate.Start(rotateChan, processMetricsNotify)
 		assert.Error(t, err)
 		dstData, _ := os.ReadFile(destFile)
 		assert.Equal(t, "HelloWorld", string(dstData), "got %s, want %s", "HelloWorld", dstData)
@@ -92,6 +95,7 @@ func TestLogRotate_RotatedFileExistsAndContentMatches(t *testing.T) {
 		srcContent := []byte("Rotated file content check")
 		os.WriteFile(srcFile, srcContent, 0644)
 		rotateChan := make(chan bool)
+		processMetricsNotify := make(chan bool)
 
 		logRotate := NewLogRotate(srcFile, dstFile, interval, zap.NewNop())
 		time.AfterFunc(time.Millisecond*170, func() {
@@ -99,7 +103,7 @@ func TestLogRotate_RotatedFileExistsAndContentMatches(t *testing.T) {
 			close(rotateChan)
 		})
 
-		err := logRotate.Start(rotateChan)
+		err := logRotate.Start(rotateChan, processMetricsNotify)
 		assert.Error(t, err)
 		assert.Equal(t, ErrStoppedByCancelSignal, err)
 

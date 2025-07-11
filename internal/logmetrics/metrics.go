@@ -80,14 +80,7 @@ func (lm *LogMetrics) Start(metricsChan <-chan bool) error {
 
 	lm.initMetrics()
 
-	go func() {
-		err := lm.serveMetrics()
-		if err != nil {
-			lm.logger.Error("metrics server exited with error", zap.Error(err))
-			lm.cancel()
-		}
-
-	}()
+	go lm.serveMetrics()
 
 	for {
 		select {
@@ -105,6 +98,11 @@ func (lm *LogMetrics) Start(metricsChan <-chan bool) error {
 func (lm *LogMetrics) initMetrics() {
 	var constLabels prometheus.Labels
 	for _, kpi := range *lm.kpis {
+
+		if _, exists := lm.promMetrics[kpi.Name]; exists {
+			continue
+		}
+
 		constLabels = make(prometheus.Labels)
 		if len(kpi.CustomLabels) > 0 {
 			maps.Copy(constLabels, kpi.CustomLabels)
@@ -131,14 +129,13 @@ func (lm *LogMetrics) updatePromMetrics() error {
 
 }
 
-func (lm *LogMetrics) serveMetrics() error {
-	http.Handle(lm.metricsPath, promhttp.Handler())
+func (lm *LogMetrics) serveMetrics() {
+	mux := http.NewServeMux()
+	mux.Handle(lm.metricsPath, promhttp.Handler())
 
-	if err := http.ListenAndServe(lm.listenAddr, nil); err != nil {
+	if err := http.ListenAndServe(lm.listenAddr, mux); err != nil {
 		lm.logger.Fatal("metrics server failed", zap.Error(err))
-		return err
 	}
-	return nil
 }
 
 func (lm *LogMetrics) Stop() {

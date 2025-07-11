@@ -38,7 +38,7 @@ func NewLogRotate(srcFile string, dstFile string, interval time.Duration, logger
 
 var ErrStoppedByCancelSignal = fmt.Errorf("stopped by cancel signal")
 
-func (l *LogRotate) Start(rotateChan chan<- bool) error {
+func (l *LogRotate) Start(rotateChan chan<- bool, processMetricsNotify chan bool) error {
 
 	ticker := time.NewTicker(l.interval)
 	defer ticker.Stop()
@@ -51,6 +51,7 @@ func (l *LogRotate) Start(rotateChan chan<- bool) error {
 			if err := l.rotate(rotateChan); err != nil {
 				return err
 			}
+			processMetricsNotify <- true
 
 		}
 	}

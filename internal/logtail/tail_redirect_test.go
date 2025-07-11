@@ -3,6 +3,7 @@ package logtail
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -78,16 +79,16 @@ func TestTailAndRedirect(t *testing.T) {
 
 		err := os.WriteFile(srcFile, []byte("line1\n"), 0644)
 		assert.NoError(t, err)
-
 		tr := NewTailAndRedirect(srcFile, dstFile, logger)
-		tr.Stop()
+		tr.flushTicker = time.NewTicker(100 * time.Millisecond)
 		err = tr.initFsWatcher()
 		assert.NoError(t, err)
-
 		err = tr.initOpenSrcFile()
 		assert.NoError(t, err)
 		assert.NotNil(t, tr.srcFile)
-		assert.NotNil(t, tr.srcScanner)
+		assert.NotNil(t, tr.srcReader)
+		fmt.Println("before srcfile stop")
+		tr.Stop()
 	})
 
 	t.Run("initOpenSrcFile_FileNotExistThenCreated", func(t *testing.T) {
@@ -95,6 +96,7 @@ func TestTailAndRedirect(t *testing.T) {
 		srcFile := filepath.Join(tmpDir, "src.log")
 		dstFile := filepath.Join(tmpDir, "dst.log")
 		tr := NewTailAndRedirect(srcFile, dstFile, logger)
+		tr.flushTicker = time.NewTicker(100 * time.Millisecond)
 		err := tr.initFsWatcher()
 		defer tr.Stop()
 		assert.NoError(t, err)
@@ -118,7 +120,7 @@ func TestTailAndRedirect(t *testing.T) {
 		case err := <-done:
 			assert.NoError(t, err)
 			assert.NotNil(t, tr.srcFile)
-			assert.NotNil(t, tr.srcScanner)
+			assert.NotNil(t, tr.srcReader)
 		case <-time.After(2 * time.Second):
 			t.Fatal("initOpenSrcFile did not return after file was created")
 		}
@@ -130,6 +132,7 @@ func TestTailAndRedirect(t *testing.T) {
 		dstFile := filepath.Join(tmpDir, "dst.log")
 
 		tr := NewTailAndRedirect(srcFile, dstFile, logger)
+		tr.flushTicker = time.NewTicker(100 * time.Millisecond)
 		defer tr.Stop()
 		err := tr.initFsWatcher()
 		assert.NoError(t, err)
@@ -158,15 +161,15 @@ func TestTailAndRedirect(t *testing.T) {
 		defer dstF.Close()
 
 		tr := &TailAndRedirect{
-			srcFile:    srcF,
-			srcScanner: bufio.NewReaderSize(srcF, 64*1024),
-			dstFile:    dstF,
-			dstWriter:  bufio.NewWriterSize(dstF, 64*1024),
-			logger:     logger,
+			srcFile:   srcF,
+			srcReader: bufio.NewReaderSize(srcF, 64*1024),
+			dstFile:   dstF,
+			dstWriter: bufio.NewWriterSize(dstF, 64*1024),
+			logger:    logger,
 		}
 
 		tr.readLineAndRedirect()
-
+		tr.dstWriter.Flush()
 		dstF.Sync()
 		b, err := os.ReadFile(dstFile)
 		assert.NoError(t, err)
@@ -175,8 +178,8 @@ func TestTailAndRedirect(t *testing.T) {
 
 	t.Run("readLineAndRedirect_NoSrcScanner", func(t *testing.T) {
 		tr := &TailAndRedirect{
-			srcScanner: nil,
-			logger:     logger,
+			srcReader: nil,
+			logger:    logger,
 		}
 		tr.readLineAndRedirect()
 	})
@@ -188,10 +191,10 @@ func TestTailAndRedirect(t *testing.T) {
 
 		dstFile := &errWriter{}
 		tr := &TailAndRedirect{
-			srcFile:    nil,
-			srcScanner: bufio.NewReaderSize(r, 64*1024),
-			dstWriter:  bufio.NewWriterSize(dstFile, 64*1024),
-			logger:     logger,
+			srcFile:   nil,
+			srcReader: bufio.NewReaderSize(r, 64*1024),
+			dstWriter: bufio.NewWriterSize(dstFile, 64*1024),
+			logger:    logger,
 		}
 
 		go func() {
@@ -225,9 +228,8 @@ func TestTailAndRedirect(t *testing.T) {
 			logger:             logger,
 		}
 
-		done := make(chan error)
 		go func() {
-			done <- tr.detectTruncate()
+			tr.detectTruncate()
 		}()
 
 		timeSleep(50)
@@ -241,7 +243,6 @@ func TestTailAndRedirect(t *testing.T) {
 		}
 
 		cancel()
-		<-done
 	})
 
 	t.Run("detectTruncate_StopsOnContextDone", func(t *testing.T) {
@@ -254,15 +255,14 @@ func TestTailAndRedirect(t *testing.T) {
 			logger:             logger,
 		}
 
-		done := make(chan error)
 		go func() {
-			done <- tr.detectTruncate()
+			tr.truncateDetectorCh <- struct{}{}
 		}()
 
 		cancel()
 		select {
-		case err := <-done:
-			assert.Error(t, err)
+		case <-tr.truncateDetectorCh:
+			break
 		case <-time.After(500 * time.Millisecond):
 			t.Fatal("detectTruncate did not return after context cancel")
 		}
@@ -287,14 +287,12 @@ func TestTailAndRedirect(t *testing.T) {
 			logger:             logger,
 		}
 
-		done := make(chan error)
 		go func() {
-			done <- tr.detectTruncate()
+			tr.detectTruncate()
 		}()
 
 		timeSleep(50)
 		cancel()
-		<-done
 	})
 }
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/akmanon/kpi-metricsd/internal/config"
+	"github.com/akmanon/kpi-metricsd/internal/logmetrics"
 	"github.com/akmanon/kpi-metricsd/internal/logrotate"
 	"github.com/akmanon/kpi-metricsd/internal/logtail"
 	"go.uber.org/zap"
@@ -13,6 +14,7 @@ import (
 type App struct {
 	LogRotate       *logrotate.LogRotate
 	TailAndRedirect *logtail.TailAndRedirect
+	LogMetrics      *logmetrics.LogMetrics
 	wg              sync.WaitGroup
 }
 
@@ -25,23 +27,31 @@ func NewApp(cfg *config.Cfg, logger *zap.Logger) *App {
 
 	logTail := logtail.NewTailAndRedirect(srcFile, destFile, logger)
 	logRotate := logrotate.NewLogRotate(destFile, destFileRotated, rotateInt, logger)
+	logMetrics, err := logmetrics.NewLogMetrics(cfg, destFileRotated, logger)
+	if err != nil {
+		logger.Error("", zap.Error(err))
+	}
 	return &App{
 		LogRotate:       logRotate,
 		TailAndRedirect: logTail,
+		LogMetrics:      logMetrics,
 	}
 }
 
 func (app *App) Run() {
 	rotateChan := make(chan bool)
-	app.wg.Add(1)
+	processMetricsNotify := make(chan bool)
 
-	go app.LogRotate.Start(rotateChan)
+	app.wg.Add(1)
+	go app.LogRotate.Start(rotateChan, processMetricsNotify)
 	defer app.wg.Done()
 
 	app.wg.Add(1)
 	go app.TailAndRedirect.Start(rotateChan)
 	defer app.wg.Done()
 
+	app.wg.Add(1)
+	go app.LogMetrics.Start(processMetricsNotify)
 	app.wg.Wait()
 
 }
@@ -51,5 +61,4 @@ func (app *App) Stop() {
 	go app.LogRotate.Stop()
 	go app.TailAndRedirect.Stop()
 	close(rotateChan)
-
 }
