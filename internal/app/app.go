@@ -34,6 +34,7 @@ func NewApp(cfg *config.Cfg, logger *zap.Logger) *App {
 func (app *App) Run() {
 	rotateChan := make(chan bool)
 	app.wg.Add(1)
+
 	go app.LogRotate.Start(rotateChan)
 	defer app.wg.Done()
 
