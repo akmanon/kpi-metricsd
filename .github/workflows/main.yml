@@ -21,7 +21,7 @@ jobs:
       - name: Build the app
         run: |
           mkdir -p build/
-          go build -ldflags="-w -s" -o ./build/kpi-metricsd .
+          go build -o ./build/kpi-metricsd .
 
       - name: Create tar.gz archive
         run: |
