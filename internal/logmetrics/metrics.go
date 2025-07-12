@@ -10,26 +10,29 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/akmanon/kpi-metricsd/internal/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus/push"
 	"go.uber.org/zap"
 )
 
 type LogMetrics struct {
-	logFile       string
-	kpis          *[]config.KPI
-	compiledRegex map[string]*regexp.Regexp
-	ctx           context.Context
-	cancel        context.CancelFunc
-	promMetrics   map[string]prometheus.Gauge
-	kpiCount      map[string]float64
-	logger        *zap.Logger
-	mu            sync.Mutex
-	listenAddr    string
-	metricsPath   string
+	logFile        string
+	kpis           *[]config.KPI
+	compiledRegex  map[string]*regexp.Regexp
+	ctx            context.Context
+	cancel         context.CancelFunc
+	promMetrics    map[string]prometheus.Gauge
+	kpiCount       map[string]float64
+	logger         *zap.Logger
+	mu             sync.Mutex
+	listenAddr     string
+	metricsPath    string
+	PushGatewayCfg config.PushGateway
 }
 
 func NewLogMetrics(cfg *config.Cfg, logFile string, logger *zap.Logger) (*LogMetrics, error) {
@@ -37,8 +40,12 @@ func NewLogMetrics(cfg *config.Cfg, logFile string, logger *zap.Logger) (*LogMet
 	compiledRegex := make(map[string]*regexp.Regexp)
 	promMetrics := make(map[string]prometheus.Gauge)
 	kpiCount := make(map[string]float64)
-
+	var pushGatewayCfg config.PushGateway
 	kpis := &cfg.KPIs
+	fmt.Println(cfg.Server.PushGateway)
+	if cfg.Server.PushGateway.Enabled {
+		pushGatewayCfg = cfg.Server.PushGateway
+	}
 
 	err := compileRegexpFromCfg(kpis, &compiledRegex)
 	if err != nil {
@@ -47,18 +54,18 @@ func NewLogMetrics(cfg *config.Cfg, logFile string, logger *zap.Logger) (*LogMet
 		return nil, err
 	}
 	logger.Info("regex from config has been compiled sucessfully")
-
 	return &LogMetrics{
-		kpis:          kpis,
-		compiledRegex: compiledRegex,
-		promMetrics:   promMetrics,
-		logFile:       logFile,
-		kpiCount:      kpiCount,
-		ctx:           ctx,
-		cancel:        cancel,
-		logger:        logger,
-		listenAddr:    ":" + strconv.Itoa(cfg.Server.Port),
-		metricsPath:   cfg.Server.MetricsPath,
+		kpis:           kpis,
+		compiledRegex:  compiledRegex,
+		promMetrics:    promMetrics,
+		logFile:        logFile,
+		kpiCount:       kpiCount,
+		ctx:            ctx,
+		cancel:         cancel,
+		logger:         logger,
+		listenAddr:     ":" + strconv.Itoa(cfg.Server.Port),
+		metricsPath:    cfg.Server.MetricsPath,
+		PushGatewayCfg: pushGatewayCfg,
 	}, nil
 }
 
@@ -125,6 +132,29 @@ func (lm *LogMetrics) updatePromMetrics() error {
 	for k, v := range lm.kpiCount {
 		lm.promMetrics[k].Set(v)
 	}
+	if lm.PushGatewayCfg.Enabled {
+		lm.pushMetrics()
+	}
+	return nil
+
+}
+
+func (lm *LogMetrics) pushMetrics() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pusher := push.New(lm.PushGatewayCfg.URL, lm.PushGatewayCfg.Job).
+		Grouping("instance", lm.PushGatewayCfg.Instance)
+
+	// Push all KPIs
+	for _, metric := range lm.promMetrics {
+		pusher.Collector(metric)
+	}
+
+	if err := pusher.PushContext(ctx); err != nil {
+		lm.logger.Info("failed to push metrics to PushGateway", zap.Error(err))
+	} else {
+		lm.logger.Info("metrics pushed to PushGateway")
+	}
 	return nil
 
 }
@@ -139,6 +169,7 @@ func (lm *LogMetrics) serveMetrics() {
 }
 
 func (lm *LogMetrics) Stop() {
+	lm.logger.Info("stopping metrics component")
 	lm.cancel()
 }
 

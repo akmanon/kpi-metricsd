@@ -1,23 +1,28 @@
 server:
-  port: 8080
+  port: 9099
   metrics_path: "/metrics"
+  pushgateway:
+    enabled: true
+    url: "http://localhost:9091"
+    job: "myjob"
+    instance: "localhost"
 
 log_config:
   source_log_file: "testdata/app.log"
   redirect_log_file: "testdata/app_redirect.log"
   rotated_log_file: "testdata/app_rotated.log"
-  rotation_interval: "2m"
+  rotation_interval: "1m"
 
 kpis:
   - name : "test1"
-    regex : "^test.*$"
+    regex : "^.*test.*$"
     custom_labels:
       ipaddr: "127.0.0.1"
       hname: "localhost"
   - name : "test2"
     regex : "^.*Test.*$"
     custom_labels:
-      ipaddr: "127.0.0.1"
+      ipaddr: "127.0.0.2"
       hname: "localhost1"
   - name : "test3"
-    regex : "^.*placetest.*$"
+    regex : "^placeTest$"

@@ -269,6 +269,7 @@ func (t *TailAndRedirect) initFsWatcher() error {
 }
 
 func (t *TailAndRedirect) Stop() {
+	t.logger.Info("stopping tailandredirect component")
 	t.cancel()
 	t.flushTicker.Stop()
 	if t.dstFile != nil {

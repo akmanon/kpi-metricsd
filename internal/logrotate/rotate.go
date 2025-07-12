@@ -110,5 +110,6 @@ func (l *LogRotate) rotate(rotateChan chan<- bool) error {
 }
 
 func (l *LogRotate) Stop() {
+	l.logger.Info("stopping logrotate component")
 	l.cancel()
 }

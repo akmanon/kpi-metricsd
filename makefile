@@ -6,7 +6,7 @@ build:
 	go build -o ./build/kpi-metricsd .
 
 run:
-	./build/kpi-metricsd
+	./build/kpi-metricsd -config="./internal/testdata/conf.yaml"
 
 test:
 	go test -v ./...
