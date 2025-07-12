@@ -1,0 +1,34 @@
+name: Build and Archive
+
+on:
+  push:
+    branches:
+      - main  # or your desired branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go (if it's a Go app, optional)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.3'
+
+      - name: Build the app
+        run: |
+          mkdir -p build/
+          go build -ldflags="-w -s" -o ./build/kpi-metricsd .
+
+      - name: Create tar.gz archive
+        run: |
+          tar -czvf kpi-metricsd.tar.gz -C build kpi-metricsd
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kpi-metricsd-tarball
+          path: kpi-metricsd.tar.gz
