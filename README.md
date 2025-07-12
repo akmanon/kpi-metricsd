@@ -234,29 +234,3 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Permission Denied**: Ensure the application has read access to the source log file
-2. **Port Already in Use**: Change the server port in the configuration
-3. **Invalid Regex**: Test your regex patterns before adding them to the configuration
-4. **Pushgateway Connection**: Verify the Pushgateway URL and network connectivity
-
-### Logs
-
-The application uses structured logging with zap. Check the application logs for detailed error messages and debugging information.
-
